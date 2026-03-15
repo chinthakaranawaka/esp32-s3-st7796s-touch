@@ -34,3 +34,4 @@ idf.py build
 # Flash to device
 idf.py -p /dev/ttyUSB0 flash monitor
 # esp32-s3-st7796s-touch
+# esp32-s3-st7796s-touch
