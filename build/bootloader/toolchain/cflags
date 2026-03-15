@@ -1,0 +1,5 @@
+"-specs=/home/chinthaka/My_Works/esp-idf/st7796s_spi_touch/build/bootloader/specs/picolibc.specs"
+-mlongcalls
+-fno-builtin-memcpy
+-fno-builtin-memset
+-fno-builtin-bzero
