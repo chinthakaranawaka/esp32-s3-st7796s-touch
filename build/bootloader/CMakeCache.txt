@@ -261,7 +261,7 @@ IGNORE_EXTRA_COMPONENT:UNINITIALIZED=
 PROJECT_SOURCE_DIR:UNINITIALIZED=/home/chinthaka/My_Works/esp-idf/st7796s_spi_touch
 
 //No help, variable specified on the command line.
-PYTHON:UNINITIALIZED=/home/chinthaka/.espressif/python_env/idf6.1_py3.13_env/bin/python
+PYTHON:UNINITIALIZED=python
 
 //No help, variable specified on the command line.
 PYTHON_DEPS_CHECKED:UNINITIALIZED=1

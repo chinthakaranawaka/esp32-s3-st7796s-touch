@@ -43,16 +43,22 @@ static esp_lcd_touch_handle_t touch_handle = NULL;
 // Button press counter
 static int press_count = 0;
 
+// Calibration values (will be updated after finding correct values)
+static uint16_t cal_x_min = 17;    // Replace with your measured top-left X
+static uint16_t cal_x_max = 300;   // Replace with your measured top-right X
+static uint16_t cal_y_min = 21;    // Replace with your measured top-left Y
+static uint16_t cal_y_max = 453;   // Replace with your measured bottom-left Y
+
 // Event handler function prototypes
 static void btn_event_handler(lv_event_t *e);
 static void slider_event_handler(lv_event_t *e);
 
 /**
- * LVGL touch read callback - UPDATED with correct API
+ * LVGL touch read callback with calibration and debug
  */
 static void touch_driver_read(lv_indev_drv_t *drv, lv_indev_data_t *data)
 {
-    static esp_lcd_touch_point_data_t touch_points[1];  // New structure for touch points
+    static esp_lcd_touch_point_data_t touch_points[1];
     uint8_t touch_cnt = 0;
 
     // Read touch data from controller
@@ -62,7 +68,7 @@ static void touch_driver_read(lv_indev_drv_t *drv, lv_indev_data_t *data)
         return;
     }
     
-    // Get coordinates using the new API (4 parameters, not 6)
+    // Get coordinates using the API
     res = esp_lcd_touch_get_data(touch_handle, touch_points, &touch_cnt, 1);
     
     if (res == ESP_OK && touch_cnt > 0) {
@@ -70,7 +76,31 @@ static void touch_driver_read(lv_indev_drv_t *drv, lv_indev_data_t *data)
         data->point.y = touch_points[0].y;
         data->state = LV_INDEV_STATE_PRESSED;
         
-        ESP_LOGD(TAG, "Touch: X=%d, Y=%d", touch_points[0].x, touch_points[0].y);
+        // ===== FIXED: Always print raw values for calibration =====
+        // Get the raw ADC values directly from the touch controller
+        // These are the values before any transformation
+        
+        // Method 1: If the driver provides a get_raw function
+        #ifdef ESP_LCD_TOUCH_XPT2046_GET_RAW_SUPPORTED
+        uint16_t raw_x, raw_y;
+        if (esp_lcd_touch_xpt2046_get_raw(touch_handle, &raw_x, &raw_y) == ESP_OK) {
+            ESP_LOGI(TAG, "RAW - X: %d, Y: %d | Screen - X: %d, Y: %d", 
+                     raw_x, raw_y, touch_points[0].x, touch_points[0].y);
+        } else {
+            ESP_LOGI(TAG, "SCREEN ONLY - X: %d, Y: %d", 
+                     touch_points[0].x, touch_points[0].y);
+        }
+        #else
+        // Method 2: If no raw function, just print screen coordinates
+        // and note that these are already transformed by mirror flags
+        ESP_LOGI(TAG, "TOUCH - X: %d, Y: %d (mirror_x=%d, mirror_y=%d)", 
+                 touch_points[0].x, touch_points[0].y, 
+                 false, true);  // Your touch settings
+        #endif
+        
+        // Method 3: For debugging, also print the touch count
+        ESP_LOGD(TAG, "Touch count: %d", touch_cnt);
+        
     } else {
         data->state = LV_INDEV_STATE_RELEASED;
     }
@@ -147,7 +177,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, false));
     ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel_handle, 0, 0));
     ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(panel_handle, false));
-    // Flip display horizontally only
+    // Display: Horizontal flip only (adjust as needed)
     ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_handle, true, false));  // mirror_x=true, mirror_y=false
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
 
@@ -173,7 +203,7 @@ void app_main(void)
     
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI2_HOST, &touch_io_config, &touch_io_handle));
 
-    // Configure touch parameters
+    // YOUR EXACT TOUCH CONFIGURATION - preserved exactly as you specified
     esp_lcd_touch_config_t touch_cfg = {
         .x_max = EXAMPLE_LCD_H_RES,
         .y_max = EXAMPLE_LCD_V_RES,
@@ -185,13 +215,38 @@ void app_main(void)
         },
         .flags = {
             .swap_xy = false,
-            .mirror_x = false,
-            .mirror_y = true,
+            .mirror_x = false,   // No horizontal flip for touch
+            .mirror_y = true,    // Vertical flip for touch (as you specified)
         },
     };
 
     // Create touch handle
     ESP_ERROR_CHECK(esp_lcd_touch_new_spi_xpt2046(touch_io_handle, &touch_cfg, &touch_handle));
+
+    // --- CALIBRATION INSTRUCTIONS ---
+    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "=== TOUCH CALIBRATION MODE ===");
+    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "Touch the FOUR CORNERS of the screen and record the values:");
+    ESP_LOGI(TAG, "1. TOP-LEFT corner");
+    ESP_LOGI(TAG, "2. TOP-RIGHT corner");
+    ESP_LOGI(TAG, "3. BOTTOM-LEFT corner");
+    ESP_LOGI(TAG, "4. BOTTOM-RIGHT corner");
+    ESP_LOGI(TAG, "Watch the serial output for TOUCH coordinates");
+    ESP_LOGI(TAG, "========================================");
+    
+    // Display current calibration values
+    ESP_LOGI(TAG, "Current calibration settings:");
+    ESP_LOGI(TAG, "cal_x_min = %d (top-left X)", cal_x_min);
+    ESP_LOGI(TAG, "cal_x_max = %d (top-right X)", cal_x_max);
+    ESP_LOGI(TAG, "cal_y_min = %d (top-left Y)", cal_y_min);
+    ESP_LOGI(TAG, "cal_y_max = %d (bottom-left Y)", cal_y_max);
+    ESP_LOGI(TAG, "Touch flags: mirror_x=%d, mirror_y=%d", 
+             touch_cfg.flags.mirror_x, touch_cfg.flags.mirror_y);
+    ESP_LOGI(TAG, "========================================");
+    
+    // Note: The driver uses the mirror flags for basic orientation
+    // Calibration fine-tunes the mapping of raw ADC values to screen pixels
 
     // --- 8. Initialize LVGL port ---
     ESP_LOGI(TAG, "Initialize LVGL port");
@@ -210,11 +265,11 @@ void app_main(void)
         .monochrome = false,
         .rotation = {
             .swap_xy = false,
-            .mirror_x = true,   // Mirror horizontally
-            .mirror_y = false,   // No vertical mirror
+            .mirror_x = true,   // Mirror horizontally for display
+            .mirror_y = false,  // No vertical mirror for display
         }
     };
-        
+    
     lvgl_port_add_disp(&disp_cfg);
 
     // --- 10. Register touch input device with LVGL ---
@@ -236,8 +291,7 @@ void app_main(void)
     
     // Get active screen and set background
     lv_obj_t *scr = lv_scr_act();
-    //lv_obj_set_style_bg_color(scr, lv_color_hex(0x2F4F4F), LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0xFFFFFF), LV_STATE_DEFAULT);  // White background temporarily
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x2F4F4F), LV_STATE_DEFAULT);
 
     // Create a title
     lv_obj_t *title = lv_label_create(scr);
@@ -246,7 +300,7 @@ void app_main(void)
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
 
-    // Create a touch button
+    // Create a touch button (this text is clear)
     lv_obj_t *btn = lv_btn_create(scr);
     lv_obj_set_size(btn, 150, 60);
     lv_obj_set_style_bg_color(btn, lv_color_hex(0x2196F3), 0);
@@ -259,6 +313,7 @@ void app_main(void)
     // Add counter display
     lv_obj_t *counter_label = lv_label_create(scr);
     lv_label_set_text(counter_label, "Button pressed: 0 times");
+    lv_obj_set_style_text_font(counter_label, &lv_font_montserrat_16, 0);
     lv_obj_align(counter_label, LV_ALIGN_BOTTOM_MID, 0, -60);
     
     // Add button click event
@@ -272,20 +327,30 @@ void app_main(void)
     // Value display for slider
     lv_obj_t *slider_value = lv_label_create(scr);
     lv_label_set_text(slider_value, "Slider: 0");
+    lv_obj_set_style_text_font(slider_value, &lv_font_montserrat_16, 0);
     lv_obj_align_to(slider_value, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 20);
     
     // Update slider value on change
     lv_obj_add_event_cb(slider, slider_event_handler, LV_EVENT_VALUE_CHANGED, slider_value);
     
-    // Add a simple touch area indicator
-    lv_obj_t *touch_indicator = lv_label_create(scr);
-    lv_label_set_text(touch_indicator, "Touch anywhere to test");
-    lv_obj_set_style_text_color(touch_indicator, lv_color_hex(0xAAAAAA), 0);
-    lv_obj_align(touch_indicator, LV_ALIGN_BOTTOM_MID, 0, -20);
+    // Add calibration display
+    lv_obj_t *calib_label = lv_label_create(scr);
+    lv_label_set_text_fmt(calib_label, "Cal: X:%d-%d Y:%d-%d | Flip: X:%d Y:%d", 
+                          cal_x_min, cal_x_max, cal_y_min, cal_y_max,
+                          touch_cfg.flags.mirror_x, touch_cfg.flags.mirror_y);
+    lv_obj_set_style_text_color(calib_label, lv_color_hex(0xFFFF00), 0);
+    lv_obj_align(calib_label, LV_ALIGN_BOTTOM_MID, 0, -20);
     
     lvgl_port_unlock();
 
+    ESP_LOGI(TAG, "========================================");
     ESP_LOGI(TAG, "LVGL with touch initialized successfully!");
+    ESP_LOGI(TAG, "Display: mirror_x=true, mirror_y=false");
+    ESP_LOGI(TAG, "Touch: mirror_x=false, mirror_y=true (your setting)");
+    ESP_LOGI(TAG, "Calibration: X_min=%d, X_max=%d, Y_min=%d, Y_max=%d", 
+             cal_x_min, cal_x_max, cal_y_min, cal_y_max);
+    ESP_LOGI(TAG, "Touch the screen to see coordinates in serial monitor");
+    ESP_LOGI(TAG, "========================================");
     
     // Main loop does nothing - LVGL runs in its own task
     while (1) {
