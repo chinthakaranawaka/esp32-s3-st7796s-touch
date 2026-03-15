@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "esp-idf/espressif__esp_lcd_st7796",
+		"source" : "managed_components/espressif__esp_lcd_st7796"
+	}
+}

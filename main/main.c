@@ -186,7 +186,7 @@ void app_main(void)
         .flags = {
             .swap_xy = false,
             .mirror_x = false,
-            .mirror_y = false,
+            .mirror_y = true,
         },
     };
 
@@ -236,7 +236,8 @@ void app_main(void)
     
     // Get active screen and set background
     lv_obj_t *scr = lv_scr_act();
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x2F4F4F), LV_STATE_DEFAULT);
+    //lv_obj_set_style_bg_color(scr, lv_color_hex(0x2F4F4F), LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0xFFFFFF), LV_STATE_DEFAULT);  // White background temporarily
 
     // Create a title
     lv_obj_t *title = lv_label_create(scr);
